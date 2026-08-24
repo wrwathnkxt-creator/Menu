@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SmartKitchen — เข้าสู่ระบบ</title>
+  <meta name="description" content="ระบบสั่งอาหารและจัดการครัวอัจฉริยะ — SmartKitchen">
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    body { display: flex; align-items: center; justify-content: center; min-height: 100dvh; padding: var(--space-6); background: linear-gradient(160deg, #eff4ff 0%, #f8f9ff 60%); }
+    .login-wrap { width: 100%; max-width: 400px; }
+    .logo-block { text-align: center; margin-bottom: var(--space-8); }
+    .logo-icon { width: 64px; height: 64px; border-radius: var(--radius-lg); background: var(--gradient-ai); display: flex; align-items: center; justify-content: center; margin: 0 auto var(--space-3); box-shadow: 0 8px 24px rgba(0,72,141,0.3); }
+    .logo-icon .material-symbols-outlined { font-size: 2rem; color: white; font-variation-settings: 'FILL' 1; }
+    .logo-name { font-size: 1.6rem; font-weight: 700; color: var(--color-primary); letter-spacing: -0.03em; }
+    .logo-sub  { font-size: 0.8rem; color: var(--color-on-surface-var); margin-top: 2px; }
+    .role-grid { display: grid; grid-template-columns: 1fr; gap: var(--space-3); margin-bottom: var(--space-6); }
+    .role-card {
+      display: flex; align-items: center; gap: var(--space-4);
+      padding: var(--space-4) var(--space-5);
+      background: white; border: 1.5px solid var(--color-outline-var);
+      border-radius: var(--radius-lg); cursor: pointer;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
+    }
+    .role-card:hover { border-color: var(--color-primary); box-shadow: 0 4px 16px rgba(0,72,141,0.12); }
+    .role-card:active { transform: scale(0.98); }
+    .role-card.selected { border-color: var(--color-primary); background: var(--color-surface-low); box-shadow: 0 0 0 3px rgba(0,72,141,0.12); }
+    .role-card-icon { width: 44px; height: 44px; border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .role-card-icon.customer { background: rgba(16,185,129,0.12); color: #065f46; }
+    .role-card-icon.chef     { background: rgba(245,158,11,0.12); color: #92400e; }
+    .role-card-icon.admin    { background: rgba(0,72,141,0.12);   color: var(--color-primary); }
+    .role-card-icon .material-symbols-outlined { font-variation-settings: 'FILL' 1; }
+    .role-card-info { flex: 1; }
+    .role-card-title { font-weight: 600; font-size: 0.95rem; }
+    .role-card-desc  { font-size: 0.78rem; color: var(--color-on-surface-var); margin-top: 2px; }
+    .login-form { display: none; margin-bottom: var(--space-5); }
+    .login-form.show { display: flex; flex-direction: column; gap: var(--space-3); animation: fade-up 0.3s ease; }
+    .divider { text-align: center; font-size: 0.8rem; color: var(--color-on-surface-var); margin: var(--space-3) 0; position: relative; }
+    .divider::before, .divider::after { content: ''; position: absolute; top: 50%; width: 40%; height: 1px; background: var(--color-outline-var); }
+    .divider::before { left: 0; } .divider::after { right: 0; }
+  </style>
+</head>
+<body>
+  <div class="login-wrap">
+    <!-- Logo -->
+    <div class="logo-block">
+      <div class="logo-icon">
+        <span class="material-symbols-outlined">restaurant</span>
+      </div>
+      <div class="logo-name">SmartKitchen</div>
+      <div class="logo-sub">ระบบสั่งอาหารและจัดการหลังร้านอัจฉริยะ</div>
+    </div>
+
+    <!-- Role Cards -->
+    <div class="role-grid">
+      <div class="role-card" id="card-customer" onclick="selectRole('customer')">
+        <div class="role-card-icon customer">
+          <span class="material-symbols-outlined">person</span>
+        </div>
+        <div class="role-card-info">
+          <div class="role-card-title">ลูกค้า</div>
+          <div class="role-card-desc">เข้าสู่หน้าสั่งอาหาร ไม่ต้อง Login</div>
+        </div>
+        <span class="material-symbols-outlined text-muted">chevron_right</span>
+      </div>
+
+      <div class="role-card" id="card-chef" onclick="selectRole('chef')">
+        <div class="role-card-icon chef">
+          <span class="material-symbols-outlined">soup_kitchen</span>
+        </div>
+        <div class="role-card-info">
+          <div class="role-card-title">พ่อครัว</div>
+          <div class="role-card-desc">หน้าคิวครัว — ต้องเข้าสู่ระบบ</div>
+        </div>
+        <span class="material-symbols-outlined text-muted">chevron_right</span>
+      </div>
+
+      <div class="role-card" id="card-admin" onclick="selectRole('admin')">
+        <div class="role-card-icon admin">
+          <span class="material-symbols-outlined">admin_panel_settings</span>
+        </div>
+        <div class="role-card-info">
+          <div class="role-card-title">ผู้จัดการร้าน</div>
+          <div class="role-card-desc">Dashboard & จัดการสต็อก — ต้องเข้าสู่ระบบ</div>
+        </div>
+        <span class="material-symbols-outlined text-muted">chevron_right</span>
+      </div>
+    </div>
+
+    <!-- Login Form (สำหรับ chef และ admin) -->
+    <div class="login-form" id="login-form">
+      <div class="form-group">
+        <label class="form-label" for="email-input">อีเมล</label>
+        <input class="form-input" type="email" id="email-input" placeholder="your@email.com" autocomplete="email">
+        <span class="form-error" id="email-error">กรุณาระบุอีเมล</span>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="password-input">รหัสผ่าน</label>
+        <input class="form-input" type="password" id="password-input" placeholder="••••••••" autocomplete="current-password">
+        <span class="form-error" id="pass-error">กรุณาระบุรหัสผ่าน</span>
+      </div>
+      <button class="btn btn-primary btn-full" id="login-btn" onclick="doLogin()">
+        <span class="material-symbols-outlined" style="font-size:1.1rem">login</span>
+        เข้าสู่ระบบ
+      </button>
+      <div id="login-error" class="text-center text-sm" style="color:var(--color-error);display:none;"></div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+
+  <script src="js/config.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/auth.js"></script>
+  <script>
+    let selectedRole = null;
+
+    // ถ้า Login อยู่แล้ว redirect ทันที
+    window.addEventListener('DOMContentLoaded', () => {
+      const user = Auth.getUser();
+      if (user) redirectByRole(user.role);
+    });
+
+    function selectRole(role) {
+      selectedRole = role;
+      document.querySelectorAll('.role-card').forEach(c => c.classList.remove('selected'));
+      document.getElementById('card-' + role).classList.add('selected');
+
+      if (role === 'customer') {
+        Auth.loginAsCustomer();
+      } else {
+        document.getElementById('login-form').classList.add('show');
+        document.getElementById('email-input').focus();
+      }
+    }
+
+    async function doLogin() {
+      const email    = document.getElementById('email-input').value.trim();
+      const password = document.getElementById('password-input').value.trim();
+      const btn      = document.getElementById('login-btn');
+      const errEl    = document.getElementById('login-error');
+
+      if (!email || !password) { showToast('กรุณากรอกอีเมลและรหัสผ่าน'); return; }
+
+      btn.textContent = 'กำลังตรวจสอบ…';
+      btn.disabled = true;
+      errEl.style.display = 'none';
+
+      const result = await Auth.login(email, password);
+
+      if (result.ok) {
+        if (result.user.role !== selectedRole) {
+          errEl.textContent = `บัญชีนี้มีสิทธิ์เป็น "${result.user.role}" ไม่ใช่ "${selectedRole}"`;
+          errEl.style.display = 'block';
+          btn.textContent = 'เข้าสู่ระบบ';
+          btn.disabled = false;
+          return;
+        }
+        redirectByRole(result.user.role);
+      } else {
+        errEl.textContent = result.message;
+        errEl.style.display = 'block';
+        btn.textContent = 'เข้าสู่ระบบ';
+        btn.disabled = false;
+      }
+    }
+
+    function redirectByRole(role) {
+      const map = { customer: 'pages/customer.html', chef: 'pages/chef.html', admin: 'pages/admin.html' };
+      window.location.href = map[role] || 'pages/customer.html';
+    }
+
+    function showToast(msg) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.classList.add('show');
+      setTimeout(() => el.classList.remove('show'), 2800);
+    }
+
+    // Enter key on password
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && document.getElementById('login-form').classList.contains('show')) doLogin();
+    });
+  </script>
+</body>
+</html>
