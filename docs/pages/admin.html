@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SmartKitchen — แดชบอร์ดผู้จัดการ</title>
+  <meta name="description" content="Admin Dashboard — จัดการสต็อก ดูสถิติยอดขาย SmartKitchen">
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    .kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); padding: var(--space-4); }
+    .kpi-card-wrap { background: white; border: 1px solid var(--color-outline-var); border-radius: var(--radius-lg); padding: var(--space-4); text-align: center; }
+    .kpi-value { font-size: 1.8rem; font-weight: 700; color: var(--color-primary); line-height: 1; }
+    .kpi-label { font-size: 0.73rem; color: var(--color-on-surface-var); margin-top: 4px; font-family: var(--font-mono); }
+    .section-header { display: flex; align-items: center; justify-content: space-between; padding: var(--space-4) var(--space-4) var(--space-2); }
+    .section-title  { font-size: 1rem; font-weight: 700; }
+    .table-wrap     { overflow-x: auto; padding: 0 var(--space-4) var(--space-4); }
+    .inv-img { width: 40px; height: 40px; border-radius: var(--radius-md); object-fit: cover; background: var(--color-surface-mid); }
+    .stock-input { width: 60px; height: 32px; text-align: center; border: 1.5px solid var(--color-outline-var); border-radius: var(--radius-md); font-family: var(--font-mono); font-size: 0.85rem; font-weight: 600; }
+    .history-status { font-family: var(--font-mono); font-size: 0.72rem; }
+    .tab-bar  { display: flex; border-bottom: 1.5px solid var(--color-outline-var); padding: 0 var(--space-4); gap: var(--space-4); }
+    .tab-item { padding: var(--space-3) 0; font-size: 0.88rem; font-weight: 600; color: var(--color-on-surface-var); cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.15s; }
+    .tab-item.active { color: var(--color-primary); border-bottom-color: var(--color-primary); }
+    .tab-content { display: none; }
+    .tab-content.show { display: block; }
+    /* Add Menu Modal */
+    .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); z-index: 200; display: flex; align-items: center; justify-content: center; padding: var(--space-4); opacity: 0; pointer-events: none; transition: opacity 0.25s; }
+    .modal-backdrop.show { opacity: 1; pointer-events: all; }
+    .modal-box { background: white; border-radius: var(--radius-lg); padding: var(--space-6); width: 100%; max-width: 420px; animation: fade-up 0.3s ease; }
+    .modal-title { font-size: 1.1rem; font-weight: 700; margin-bottom: var(--space-5); }
+  </style>
+</head>
+<body style="padding-bottom:80px">
+
+  <!-- AppBar -->
+  <header class="appbar">
+    <div class="appbar-logo">
+      <span class="material-symbols-outlined appbar-logo-icon" style="font-variation-settings:'FILL' 1">dashboard</span>
+      <span class="appbar-title">แดชบอร์ด</span>
+    </div>
+    <div class="appbar-actions">
+      <button class="btn-icon" onclick="loadAll()" title="รีเฟรช">
+        <span class="material-symbols-outlined">refresh</span>
+      </button>
+      <button class="btn-icon" onclick="Auth.logout()" title="ออกจากระบบ">
+        <span class="material-symbols-outlined">logout</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- KPI -->
+  <div class="kpi-grid">
+    <div class="kpi-card-wrap" style="grid-column:1/-1">
+      <div class="kpi-value" id="kpi-revenue">—</div>
+      <div class="kpi-label">💰 ยอดขายรวม (บาท)</div>
+    </div>
+    <div class="kpi-card-wrap">
+      <div class="kpi-value" id="kpi-orders">—</div>
+      <div class="kpi-label">📦 ออเดอร์ทั้งหมด</div>
+    </div>
+    <div class="kpi-card-wrap">
+      <div class="kpi-value" id="kpi-queue">—</div>
+      <div class="kpi-label">⏳ คิวค้างในครัว</div>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tab-bar">
+    <div class="tab-item active" onclick="switchAdminTab('inventory')">สต็อกเมนู</div>
+    <div class="tab-item" onclick="switchAdminTab('history')">ประวัติออเดอร์</div>
+  </div>
+
+  <!-- Tab: Inventory -->
+  <div class="tab-content show" id="tab-inventory">
+    <div class="section-header">
+      <span class="section-title">รายการเมนูทั้งหมด</span>
+      <button class="btn btn-primary btn-sm" onclick="openAddMenu()">
+        <span class="material-symbols-outlined" style="font-size:1rem">add</span> เพิ่มเมนู
+      </button>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table" id="inventory-table">
+        <thead>
+          <tr>
+            <th>เมนู</th>
+            <th>ราคา (฿)</th>
+            <th>สต็อก</th>
+            <th>สถานะ</th>
+            <th>บันทึก</th>
+          </tr>
+        </thead>
+        <tbody id="inventory-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Tab: History -->
+  <div class="tab-content" id="tab-history">
+    <div class="section-header">
+      <span class="section-title">ประวัติออเดอร์ทั้งหมด</span>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table" id="history-table">
+        <thead>
+          <tr>
+            <th>Order ID</th>
+            <th>ลูกค้า</th>
+            <th>รวม (฿)</th>
+            <th>สถานะ</th>
+            <th>เวลา</th>
+          </tr>
+        </thead>
+        <tbody id="history-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Bottom Nav -->
+  <nav class="bottom-nav">
+    <div class="bottom-nav-item active">
+      <span class="material-symbols-outlined" style="font-variation-settings:'FILL' 1">analytics</span>
+      <span>แดชบอร์ด</span>
+    </div>
+  </nav>
+
+  <!-- Add Menu Modal -->
+  <div class="modal-backdrop" id="add-menu-modal" onclick="handleModalClick(event)">
+    <div class="modal-box">
+      <div class="modal-title">➕ เพิ่มเมนูอาหารใหม่</div>
+      <div style="display:flex;flex-direction:column;gap:var(--space-3)">
+        <div class="form-group"><label class="form-label">รหัสเมนู</label><input class="form-input" id="nm-id" placeholder="M16"></div>
+        <div class="form-group"><label class="form-label">ชื่อเมนู</label><input class="form-input" id="nm-name" placeholder="ข้าวผัดปู"></div>
+        <div class="form-group">
+          <label class="form-label">หมวดหมู่</label>
+          <select class="form-input" id="nm-cat">
+            <option value="จานหลัก">จานหลัก</option>
+            <option value="เครื่องดื่ม">เครื่องดื่ม</option>
+            <option value="ของทานเล่น">ของทานเล่น</option>
+          </select>
+        </div>
+        <div class="form-group"><label class="form-label">ราคา (20–200 บาท)</label><input class="form-input" id="nm-price" type="number" min="20" max="200" placeholder="80"></div>
+        <div class="form-group"><label class="form-label">จำนวนสต็อกเริ่มต้น</label><input class="form-input" id="nm-stock" type="number" min="0" placeholder="20"></div>
+        <div class="form-group"><label class="form-label">URL รูปภาพ (Google Drive)</label><input class="form-input" id="nm-img" placeholder="https://drive.google.com/uc?export=view&id=..."></div>
+      </div>
+      <div style="display:flex;gap:var(--space-3);margin-top:var(--space-5)">
+        <button class="btn btn-secondary" style="flex:1" onclick="closeAddMenu()">ยกเลิก</button>
+        <button class="btn btn-primary" style="flex:2" onclick="submitAddMenu()">บันทึกเมนู</button>
+      </div>
+      <div id="add-menu-error" class="text-sm mt-2" style="color:var(--color-error);display:none"></div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+
+  <script src="../js/config.js"></script>
+  <script src="../js/api.js"></script>
+  <script src="../js/auth.js"></script>
+  <script>
+    let menuData = [];
+
+    window.addEventListener('DOMContentLoaded', () => {
+      Auth.requireRole('admin');
+      loadAll();
+    });
+
+    async function loadAll() {
+      loadStats();
+      loadInventory();
+      loadHistory();
+    }
+
+    async function loadStats() {
+      const res = await API.getStats();
+      if (res.success) {
+        const d = res.data;
+        document.getElementById('kpi-revenue').textContent = Number(d.total_revenue).toLocaleString();
+        document.getElementById('kpi-orders').textContent  = d.total_orders;
+        document.getElementById('kpi-queue').textContent   = d.active_queue;
+      }
+    }
+
+    async function loadInventory() {
+      const res = await API.getMenu();
+      if (!res.success) return;
+      menuData = res.data;
+      const tbody = document.getElementById('inventory-body');
+      tbody.innerHTML = menuData.map(m => `
+        <tr>
+          <td>
+            <div style="display:flex;align-items:center;gap:8px">
+              <img class="inv-img" src="${m.image_url}" alt="${m.name}" onerror="this.src='../assets/placeholder.svg'">
+              <div>
+                <div style="font-weight:600;font-size:0.82rem">${m.name}</div>
+                <div class="chip chip-${m.category === 'จานหลัก' ? 'cooking' : m.category === 'เครื่องดื่ม' ? 'served' : 'pending'}" style="font-size:0.65rem;margin-top:2px">${m.category}</div>
+              </div>
+            </div>
+          </td>
+          <td class="font-mono font-bold">${m.price}</td>
+          <td>
+            <input class="stock-input" type="number" id="stock-${m.id}" value="${m.stock}" min="0">
+          </td>
+          <td>
+            <label class="toggle">
+              <input type="checkbox" id="avail-${m.id}" ${m.available ? 'checked' : ''} onchange="toggleAvail('${m.id}',this.checked)">
+              <span class="toggle-slider"></span>
+            </label>
+          </td>
+          <td>
+            <button class="btn btn-secondary btn-sm" onclick="saveStock('${m.id}')">บันทึก</button>
+          </td>
+        </tr>`).join('');
+    }
+
+    async function saveStock(menuId) {
+      const val = Number(document.getElementById('stock-' + menuId).value);
+      const res = await API.updateStock(menuId, val);
+      if (res.success) showToast('✅ อัปเดตสต็อกสำเร็จ');
+      else showToast('❌ ' + (res.error?.message || 'เกิดข้อผิดพลาด'));
+    }
+
+    async function toggleAvail(menuId, available) {
+      const res = await API.toggleAvailable(menuId, available);
+      if (res.success) showToast(available ? '✅ เปิดขายแล้ว' : '⛔ ปิดการขายแล้ว');
+      else showToast('❌ ' + (res.error?.message || 'เกิดข้อผิดพลาด'));
+    }
+
+    async function loadHistory() {
+      const res = await API.getOrders('all');
+      if (!res.success) return;
+      const tbody = document.getElementById('history-body');
+      tbody.innerHTML = res.data.map(o => `
+        <tr>
+          <td class="font-mono text-sm">${o.order_id}</td>
+          <td style="font-size:0.83rem">${o.customer_name}</td>
+          <td class="font-mono font-bold">${Number(o.total).toLocaleString()}</td>
+          <td><div class="chip chip-${o.status}">${statusTH(o.status)}</div></td>
+          <td style="font-size:0.75rem;color:var(--color-on-surface-var)">${o.timestamp}</td>
+        </tr>`).join('');
+    }
+
+    function switchAdminTab(tab) {
+      document.querySelectorAll('.tab-item').forEach((t, i) => t.classList.toggle('active', i === (tab === 'inventory' ? 0 : 1)));
+      document.getElementById('tab-inventory').classList.toggle('show', tab === 'inventory');
+      document.getElementById('tab-history').classList.toggle('show', tab === 'history');
+    }
+
+    function openAddMenu()  { document.getElementById('add-menu-modal').classList.add('show'); }
+    function closeAddMenu() { document.getElementById('add-menu-modal').classList.remove('show'); document.getElementById('add-menu-error').style.display = 'none'; }
+    function handleModalClick(e) { if (e.target === document.getElementById('add-menu-modal')) closeAddMenu(); }
+
+    async function submitAddMenu() {
+      const errEl = document.getElementById('add-menu-error');
+      const data  = {
+        id:        document.getElementById('nm-id').value.trim(),
+        name:      document.getElementById('nm-name').value.trim(),
+        category:  document.getElementById('nm-cat').value,
+        price:     Number(document.getElementById('nm-price').value),
+        stock:     Number(document.getElementById('nm-stock').value),
+        image_url: document.getElementById('nm-img').value.trim()
+      };
+      if (!data.id || !data.name || !data.price) { errEl.textContent = 'กรุณากรอกรหัส, ชื่อ และราคา'; errEl.style.display = 'block'; return; }
+      if (data.price < 20 || data.price > 200) { errEl.textContent = 'ราคาต้องอยู่ระหว่าง 20-200 บาท'; errEl.style.display = 'block'; return; }
+
+      const res = await API.addMenu(data);
+      if (res.success) {
+        closeAddMenu();
+        showToast('✅ เพิ่มเมนูสำเร็จ');
+        loadInventory();
+      } else { errEl.textContent = res.error?.message || 'เกิดข้อผิดพลาด'; errEl.style.display = 'block'; }
+    }
+
+    function statusTH(s) { return { pending:'รอปรุง', cooking:'กำลังปรุง', served:'เสิร์ฟแล้ว', completed:'เสร็จสิ้น' }[s] || s; }
+
+    function showToast(msg) {
+      const el = document.getElementById('toast');
+      el.textContent = msg; el.classList.add('show');
+      setTimeout(() => el.classList.remove('show'), 3000);
+    }
+  </script>
+</body>
+</html>
