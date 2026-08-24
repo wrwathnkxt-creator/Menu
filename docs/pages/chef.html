@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SmartKitchen — ห้องครัว</title>
+  <meta name="description" content="แผงจัดการคิวครัว SmartKitchen Chef Dashboard">
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    .status-tabs { display: flex; gap: var(--space-2); padding: var(--space-4); overflow-x: auto; }
+    .status-tab  { flex-shrink: 0; padding: 6px 16px; border-radius: var(--radius-full); border: 1.5px solid var(--color-outline-var); background: white; font-size: 0.82rem; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+    .status-tab.pending   { border-color: var(--status-pending);  color: var(--status-pending); }
+    .status-tab.cooking   { border-color: var(--status-cooking);  color: var(--status-cooking); }
+    .status-tab.served    { border-color: var(--status-served);   color: var(--status-served);  }
+    .status-tab.completed { border-color: var(--status-completed);color: var(--status-completed);}
+    .status-tab.active { color: white; }
+    .status-tab.pending.active   { background: var(--status-pending);  }
+    .status-tab.cooking.active   { background: var(--status-cooking);  }
+    .status-tab.served.active    { background: var(--status-served);   }
+    .status-tab.completed.active { background: var(--status-completed);}
+    .order-card { padding: var(--space-4); position: relative; overflow: hidden; }
+    .order-card::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; }
+    .order-card.pending::before   { background: var(--status-pending); }
+    .order-card.cooking::before   { background: var(--status-cooking); }
+    .order-card.served::before    { background: var(--status-served);  }
+    .order-card.completed::before { background: var(--status-completed);}
+    .order-id   { font-family: var(--font-mono); font-size: 0.78rem; color: var(--color-on-surface-var); }
+    .order-info { font-size: 0.82rem; color: var(--color-on-surface-var); margin: var(--space-1) 0; }
+    .order-items { margin: var(--space-3) 0; }
+    .order-item  { display: flex; align-items: center; gap: var(--space-2); font-size: 0.85rem; padding: 3px 0; }
+    .order-item::before { content: '▸'; color: var(--color-primary); font-size: 0.7rem; }
+    .order-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-top: var(--space-3); }
+    .orders-list { padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); }
+    .live-badge { display: flex; align-items: center; gap: 6px; font-size: 0.75rem; color: var(--status-served); font-weight: 600; }
+    .live-dot   { width: 8px; height: 8px; border-radius: 50%; background: var(--status-served); }
+    .counter-badge { background: var(--status-pending); color: white; border-radius: 50%; width: 20px; height: 20px; font-size: 0.7rem; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; margin-left: 4px; }
+  </style>
+</head>
+<body class="mb-nav">
+
+  <!-- AppBar -->
+  <header class="appbar">
+    <div class="appbar-logo">
+      <span class="material-symbols-outlined appbar-logo-icon" style="font-variation-settings:'FILL' 1">soup_kitchen</span>
+      <span class="appbar-title">ห้องครัว</span>
+    </div>
+    <div class="appbar-actions">
+      <div class="live-badge"><div class="live-dot pulse-dot"></div><span id="poll-label">Live</span></div>
+      <button class="btn-icon" onclick="loadOrders()" title="รีเฟรช">
+        <span class="material-symbols-outlined">refresh</span>
+      </button>
+      <button class="btn-icon" onclick="Auth.logout()" title="ออกจากระบบ">
+        <span class="material-symbols-outlined">logout</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Status Filter Tabs -->
+  <div class="status-tabs hide-scrollbar">
+    <div class="status-tab pending active" data-status="pending" onclick="switchTab('pending')">
+      รอปรุง<span class="counter-badge" id="count-pending">0</span>
+    </div>
+    <div class="status-tab cooking" data-status="cooking" onclick="switchTab('cooking')">กำลังปรุง</div>
+    <div class="status-tab served"  data-status="served"  onclick="switchTab('served')">เสิร์ฟแล้ว</div>
+    <div class="status-tab completed" data-status="completed" onclick="switchTab('completed')">เสร็จสิ้น</div>
+  </div>
+
+  <!-- Orders List -->
+  <div id="orders-list" class="orders-list"></div>
+  <div id="orders-loading" class="orders-list">
+    <div class="card"><div class="order-card"><div class="skeleton" style="height:120px"></div></div></div>
+    <div class="card"><div class="order-card"><div class="skeleton" style="height:120px"></div></div></div>
+  </div>
+
+  <!-- Bottom Nav -->
+  <nav class="bottom-nav">
+    <div class="bottom-nav-item active">
+      <span class="material-symbols-outlined" style="font-variation-settings:'FILL' 1">receipt_long</span>
+      <span>ออเดอร์</span>
+    </div>
+  </nav>
+
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+
+  <script src="../js/config.js"></script>
+  <script src="../js/api.js"></script>
+  <script src="../js/auth.js"></script>
+  <script>
+    let activeTab    = 'pending';
+    let allOrders    = [];
+    let pollingTimer = null;
+    let prevPendingCount = 0;
+    // เสียงแจ้งเตือน (Web Audio API)
+    let audioCtx = null;
+
+    function playAlert() {
+      try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc  = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.type = 'sine'; osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.6);
+        osc.start(); osc.stop(audioCtx.currentTime + 0.6);
+      } catch {}
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      Auth.requireRole('chef');
+      loadOrders();
+      startPolling();
+    });
+
+    function startPolling() {
+      pollingTimer = setInterval(loadOrders, CONFIG.POLLING_INTERVAL);
+    }
+
+    async function loadOrders() {
+      const res = await API.getOrders('all');
+      document.getElementById('orders-loading').style.display = 'none';
+      if (res.success) {
+        const pendingNow = res.data.filter(o => o.status === 'pending').length;
+        if (pendingNow > prevPendingCount) { playAlert(); showToast(`🔔 มีออเดอร์ใหม่ ${pendingNow - prevPendingCount} รายการ`); }
+        prevPendingCount = pendingNow;
+        allOrders = res.data;
+        document.getElementById('count-pending').textContent = pendingNow;
+        renderOrders();
+      }
+    }
+
+    function switchTab(status) {
+      activeTab = status;
+      document.querySelectorAll('.status-tab').forEach(t => t.classList.remove('active'));
+      document.querySelector(`.status-tab[data-status="${status}"]`).classList.add('active');
+      renderOrders();
+    }
+
+    function renderOrders() {
+      const list    = document.getElementById('orders-list');
+      const filtered= allOrders.filter(o => o.status === activeTab);
+
+      if (!filtered.length) {
+        list.innerHTML = `<div class="empty-state"><span class="material-symbols-outlined">check_circle</span><p>ไม่มีออเดอร์ในสถานะนี้</p></div>`;
+        return;
+      }
+
+      list.innerHTML = filtered.map(o => {
+        let items = [];
+        try { items = JSON.parse(o.items); } catch {}
+        const nextMap = { pending: { label: '🍳 เริ่มทำอาหาร', next: 'cooking' }, cooking: { label: '✅ ปรุงเสร็จ/เสิร์ฟ', next: 'served' }, served: { label: '🏁 เสร็จสิ้น', next: 'completed' } };
+        const action  = nextMap[o.status];
+        return `
+          <div class="card order-card ${o.status} animate-fade-up">
+            <div class="flex items-center justify-between">
+              <span class="text-headline-md font-bold">${o.address}</span>
+              <div class="chip chip-${o.status}">${statusTH(o.status)}</div>
+            </div>
+            <div class="order-id mt-2">${o.order_id}</div>
+            <div class="order-info">👤 ${o.customer_name} · 📞 ${o.phone}</div>
+            <div class="order-info">🕐 ${o.timestamp}</div>
+            <div class="order-items">${items.map(i => `<div class="order-item">${i.name} × ${i.qty}</div>`).join('')}</div>
+            <div class="order-info font-bold" style="color:var(--color-primary)">รวม ${Number(o.total).toLocaleString()} ฿</div>
+            <div class="order-actions">
+              ${action ? `<button class="btn btn-primary btn-sm" onclick="changeStatus('${o.order_id}','${action.next}')">${action.label}</button>` : ''}
+            </div>
+          </div>`;
+      }).join('');
+    }
+
+    async function changeStatus(orderId, newStatus) {
+      const res = await API.updateStatus(orderId, newStatus);
+      if (res.success) { await loadOrders(); showToast('อัปเดตสถานะสำเร็จ'); }
+      else showToast('❌ ' + (res.error?.message || 'เกิดข้อผิดพลาด'));
+    }
+
+    function statusTH(s) { return { pending:'รอปรุง', cooking:'กำลังปรุง', served:'เสิร์ฟแล้ว', completed:'เสร็จสิ้น' }[s] || s; }
+
+    function showToast(msg) {
+      const el = document.getElementById('toast');
+      el.textContent = msg; el.classList.add('show');
+      setTimeout(() => el.classList.remove('show'), 3000);
+    }
+  </script>
+</body>
+</html>
