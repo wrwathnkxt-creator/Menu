@@ -1,53 +1,69 @@
-// ============================================================
-// api.js — SmartKitchen API Wrapper
-// fetch helper สำหรับเรียก Google Apps Script Web App
-// ============================================================
-
 const API = {
-
-  // ── GET Request ──────────────────────────────────────────
-  async get(action, params = {}) {
-    const url = new URL(CONFIG.GAS_URL);
-    url.searchParams.set('action', action);
-    for (const [key, val] of Object.entries(params)) {
-      url.searchParams.set(key, val);
-    }
-
-    try {
-      const res  = await fetch(url.toString());
-      const json = await res.json();
-      return json;
-    } catch (err) {
-      return { success: false, error: { code: 'NETWORK_ERROR', message: err.message } };
-    }
+  getHeaders() {
+    return {
+      'apikey': CONFIG.SUPABASE_KEY,
+      'Authorization': `Bearer ${CONFIG.SUPABASE_KEY}`,
+      'Content-Type': 'application/json'
+    };
   },
-
-  // ── POST Request ─────────────────────────────────────────
-  async post(action, body = {}) {
-    const url = CONFIG.GAS_URL + '?action=' + action;
+  async login(email, password) {
     try {
-      const res  = await fetch(url, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify(body)
+      const res = await fetch(`${CONFIG.SUPABASE_URL}/rest/v1/users?email=eq.${encodeURIComponent(email)}&password=eq.${encodeURIComponent(password)}&select=*`, { headers: this.getHeaders() });
+      const data = await res.json();
+      if (data && data.length > 0) return { success: true, data: data[0] };
+      return { success: false, error: { message: 'อีเมลหรือรหัสผ่านไม่ถูกต้อง' } };
+    } catch (err) { return { success: false, error: { message: err.message } }; }
+  },
+  async getMenu() {
+    try {
+      const res = await fetch(`${CONFIG.SUPABASE_URL}/rest/v1/menu?select=*&order=category.asc,name.asc`, { headers: this.getHeaders() });
+      const data = await res.json();
+      return { success: true, data: data };
+    } catch (err) { return { success: false, error: { message: err.message } }; }
+  },
+  async getOrders(statusFilter = 'all') {
+    try {
+      let url = `${CONFIG.SUPABASE_URL}/rest/v1/orders?select=*&order=created_at.desc`;
+      if (statusFilter !== 'all') url += `&status=eq.${statusFilter}`;
+      const res = await fetch(url, { headers: this.getHeaders() });
+      const data = await res.json();
+      return { success: true, data: data };
+    } catch (err) { return { success: false, error: { message: err.message } }; }
+  },
+  async getStats() {
+    try {
+      const res = await fetch(`${CONFIG.SUPABASE_URL}/rest/v1/orders?select=*`, { headers: this.getHeaders() });
+      const data = await res.json();
+      let total_orders = 0, total_revenue = 0, active_queue = 0;
+      data.forEach(order => {
+        total_orders++;
+        total_revenue += Number(order.total);
+        if (order.status === 'pending' || order.status === 'cooking') active_queue++;
       });
-      const json = await res.json();
-      return json;
-    } catch (err) {
-      return { success: false, error: { code: 'NETWORK_ERROR', message: err.message } };
-    }
+      return { success: true, data: { total_orders, total_revenue, active_queue } };
+    } catch (err) { return { success: false, error: { message: err.message } }; }
   },
-
-  // ── Convenience Methods ───────────────────────────────────
-  getMenu()                          { return this.get('getMenu'); },
-  getOrders(status = 'all')          { return this.get('getOrders', { status }); },
-  getStats()                         { return this.get('getStats'); },
-  login(email, password)             { return this.get('login', { email, password }); },
-  validatePromo(code)                { return this.get('validatePromo', { code }); },
-
-  createOrder(data)                  { return this.post('createOrder', data); },
-  updateStatus(order_id, status)     { return this.post('updateStatus', { order_id, status }); },
-  addMenu(data)                      { return this.post('addMenu', data); },
-  updateStock(id, stock)             { return this.post('updateStock', { id, stock }); },
-  toggleAvailable(id, available)     { return this.post('toggleAvailable', { id, available }); }
+  async createOrder(data) {
+    try {
+      for (const item of data.items) {
+        const mRes = await fetch(`${CONFIG.SUPABASE_URL}/rest/v1/menu?id=eq.${item.id}&select=stock`, { headers: this.getHeaders() });
+        const mData = await mRes.json();
+        if (mData && mData.length > 0) {
+           await fetch(`${CONFIG.SUPABASE_URL}/rest/v1/menu?id=eq.${item.id}`, { method: 'PATCH', headers: this.getHeaders(), body: JSON.stringify({ stock: mData[0].stock - item.qty }) });
+        }
+      }
+      const res = await fetch(`${CONFIG.SUPABASE_URL}/rest/v1/orders`, {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify({ order_id: 'ORD-' + Math.floor(1000 + Math.random() * 9000), customer_name: data.customer_name, phone: data.phone, address: data.address, items: data.items, subtotal: data.subtotal, delivery_fee: data.delivery_fee || 0, discount: data.discount || 0, total: data.total, status: 'pending' })
+      });
+      return { success: res.ok, data: { order_id: 'success' } };
+    } catch (err) { return { success: false, error: { message: err.message } }; }
+  },
+  async updateStatus(order_id, status) {
+    try {
+      const res = await fetch(`${CONFIG.SUPABASE_URL}/rest/v1/orders?order_id=eq.${order_id}`, { method: 'PATCH', headers: this.getHeaders(), body: JSON.stringify({ status }) });
+      return { success: res.ok };
+    } catch (err) { return { success: false, error: { message: err.message } }; }
+  }
 };
